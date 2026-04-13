@@ -60,11 +60,11 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     console.log('Request body:', body);
-    const { name, ownerName } = body;
+    const { name } = body;
 
-    if (!name || !ownerName) {
+    if (!name) {
       return NextResponse.json(
-        { success: false, error: 'Name and owner name are required' },
+        { success: false, error: 'Name is required' },
         { status: 400 }
       );
     }

@@ -21,7 +21,8 @@ import {
   Zap,
   Droplets,
   Star,
-  ArrowLeft
+  ArrowLeft,
+  Sparkles
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,6 +65,13 @@ interface City {
   state: string;
 }
 
+interface RoomTypeOption {
+  type: string;
+  label: string;
+  selected: boolean;
+  price: string;
+}
+
 interface HostelProfile {
   _id?: string;
   slug?: string;
@@ -87,6 +95,7 @@ interface HostelProfile {
     establishedYear?: number;
     buildingType: 'independent' | 'apartment' | 'commercial';
   };
+  roomTypes: RoomTypeOption[];
   locationInfo: {
     googleMapLink?: string;
     latitude?: number;
@@ -124,25 +133,36 @@ interface HostelProfile {
 }
 
 const defaultAmenities = [
-  { name: "Wi-Fi", available: false, description: "", floor: "" },
-  { name: "Laundry Service", available: false, description: "", floor: "" },
-  { name: "AC Rooms", available: false, description: "", floor: "" },
-  { name: "Power Backup", available: false, description: "", floor: "" },
-  { name: "Housekeeping", available: false, description: "", floor: "" },
-  { name: "RO Water", available: false, description: "", floor: "" },
-  { name: "Common Kitchen", available: false, description: "", floor: "" },
-  { name: "Study Room", available: false, description: "", floor: "" },
-  { name: "Recreation Area", available: false, description: "", floor: "" },
-  { name: "Gym", available: false, description: "", floor: "" },
+  { name: "Wi-Fi", available: true, description: "", floor: "" },
+  { name: "Laundry Service", available: true, description: "", floor: "" },
+  { name: "AC Rooms", available: true, description: "", floor: "" },
+  { name: "Power Backup", available: true, description: "", floor: "" },
+  { name: "Housekeeping", available: true, description: "", floor: "" },
+  { name: "RO Water", available: true, description: "", floor: "" },
+  { name: "Common Kitchen", available: true, description: "", floor: "" },
+  { name: "Study Room", available: true, description: "", floor: "" },
+  { name: "Recreation Area", available: true, description: "", floor: "" },
+  { name: "Gym", available: true, description: "", floor: "" },
 ];
 
 const defaultSafetyFeatures = [
-  { feature: "CCTV Surveillance", available: false, details: "" },
-  { feature: "Security Guard", available: false, details: "" },
-  { feature: "Biometric Access", available: false, details: "" },
-  { feature: "Fire Safety Equipment", available: false, details: "" },
-  { feature: "Emergency Exit", available: false, details: "" },
-  { feature: "First Aid Kit", available: false, details: "" },
+  { feature: "CCTV Surveillance", available: true, details: "" },
+  { feature: "Security Guard", available: true, details: "" },
+  { feature: "Biometric Access", available: true, details: "" },
+  { feature: "Fire Safety Equipment", available: true, details: "" },
+  { feature: "Emergency Exit", available: true, details: "" },
+  { feature: "First Aid Kit", available: true, details: "" },
+];
+
+const defaultRoomTypes: RoomTypeOption[] = [
+  { type: 'single_non_ac', label: 'Single Sharing Non-AC', selected: false, price: '' },
+  { type: 'single_ac', label: 'Single Sharing AC', selected: false, price: '' },
+  { type: 'double_non_ac', label: 'Double Sharing Non-AC', selected: false, price: '' },
+  { type: 'double_ac', label: 'Double Sharing AC', selected: false, price: '' },
+  { type: 'triple_non_ac', label: 'Triple Sharing Non-AC', selected: false, price: '' },
+  { type: 'triple_ac', label: 'Triple Sharing AC', selected: false, price: '' },
+  { type: 'four_sharing_non_ac', label: 'Four Sharing Non-AC', selected: false, price: '' },
+  { type: 'four_sharing_ac', label: 'Four Sharing AC', selected: false, price: '' },
 ];
 
 export default function HostelProfilePage() {
@@ -153,6 +173,7 @@ export default function HostelProfilePage() {
   const [uploading, setUploading] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
   const [deletingBanner, setDeletingBanner] = useState(false);
+  const [generatingDescription, setGeneratingDescription] = useState(false);
   const [hostelInfo, setHostelInfo] = useState<any>(null);
   const [cities, setCities] = useState<City[]>([]);
   const [loadingCities, setLoadingCities] = useState(true);
@@ -160,6 +181,7 @@ export default function HostelProfilePage() {
   const [slugInput, setSlugInput] = useState("");
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
   const [checkingSlug, setCheckingSlug] = useState(false);
+  const [descriptionStyle, setDescriptionStyle] = useState('professional');
   const [photoForm, setPhotoForm] = useState({
     title: "",
     description: "",
@@ -189,6 +211,7 @@ export default function HostelProfilePage() {
       establishedYear: new Date().getFullYear(),
       buildingType: 'independent',
     },
+    roomTypes: defaultRoomTypes,
     locationInfo: {
       googleMapLink: "",
       latitude: undefined,
@@ -317,18 +340,66 @@ export default function HostelProfilePage() {
         }
       }
       
+      // Get existing room types
+      const roomTypesResponse = await fetch(`/api/hostels/${params.id}/room-types`);
+      let existingRoomTypes: any[] = [];
+      if (roomTypesResponse.ok) {
+        const roomTypesData = await roomTypesResponse.json();
+        if (roomTypesData.success) {
+          existingRoomTypes = roomTypesData.data;
+        }
+      }
+      
       // Then get hostel profile
       const profileResponse = await fetch(`/api/hostels/${params.id}/profile`);
       
       if (profileResponse.ok) {
         const profileData = await profileResponse.json();
         if (profileData.success) {
-          setProfile(profileData.data);
+          // Sync room types with existing room types from database
+          const syncedRoomTypes = defaultRoomTypes.map(defaultRoom => {
+            const existingRoom = existingRoomTypes.find(
+              (r: any) => r.name === defaultRoom.label
+            );
+            
+            if (existingRoom) {
+              return {
+                ...defaultRoom,
+                selected: true,
+                price: existingRoom.rent.toString(),
+              };
+            }
+            return defaultRoom;
+          });
+          
+          // Ensure roomTypes exists in the fetched data
+          const fetchedProfile = {
+            ...profileData.data,
+            roomTypes: syncedRoomTypes,
+          };
+          setProfile(fetchedProfile);
         }
       } else {
-        // If no profile exists, use default with hostel name
+        // If no profile exists, sync with existing room types
+        const syncedRoomTypes = defaultRoomTypes.map(defaultRoom => {
+          const existingRoom = existingRoomTypes.find(
+            (r: any) => r.name === defaultRoom.label
+          );
+          
+          if (existingRoom) {
+            return {
+              ...defaultRoom,
+              selected: true,
+              price: existingRoom.rent.toString(),
+            };
+          }
+          return defaultRoom;
+        });
+        
+        // Use default with hostel name and synced room types
         setProfile(prev => ({
           ...prev,
+          roomTypes: syncedRoomTypes,
           basicInfo: {
             ...prev.basicInfo,
             name: hostelData?.name || "",
@@ -355,8 +426,36 @@ export default function HostelProfilePage() {
       return;
     }
 
+    // Validate at least one room type is selected
+    const selectedRoomTypes = profile.roomTypes.filter(r => r.selected && r.price);
+    if (selectedRoomTypes.length === 0) {
+      toast.error("Please select at least one room type with a price");
+      return;
+    }
+
     setSaving(true);
     try {
+      // Always update hostel name to ensure it's synced
+      try {
+        const hostelUpdateResponse = await fetch(`/api/hostels/${params.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: profile.basicInfo.name,
+          }),
+        });
+
+        if (hostelUpdateResponse.ok) {
+          console.log('Hostel name updated successfully');
+        } else {
+          console.error('Failed to update hostel name');
+        }
+      } catch (error) {
+        console.error('Error updating hostel name:', error);
+      }
+
       const profileData = {
         ...profile,
         slug: slugInput,
@@ -376,8 +475,42 @@ export default function HostelProfilePage() {
         throw new Error(data.error || "Failed to save profile");
       }
 
-      toast.success("Hostel profile updated successfully");
-      router.push(`/hostel/${params.id}`);
+      toast.success("Hostel profile saved successfully");
+
+      // Auto-create room types
+      toast.loading("Creating room types...");
+      
+      try {
+        const roomResponse = await fetch(`/api/hostels/${params.id}/auto-create-rooms`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            roomTypes: selectedRoomTypes,
+            hostelName: profile.basicInfo.name,
+            city: profile.basicInfo.city,
+            amenities: profile.amenities.filter(a => a.available).map(a => a.name),
+          }),
+        });
+
+        const roomData = await roomResponse.json();
+
+        if (roomData.success) {
+          toast.success(roomData.message || "Room types created successfully!");
+        } else {
+          toast.error(roomData.error || "Failed to create room types");
+        }
+      } catch (roomError: any) {
+        console.error('Error creating rooms:', roomError);
+        toast.error("Profile saved but failed to create room types");
+      }
+
+      // Redirect to hostel page
+      setTimeout(() => {
+        router.push(`/hostel/${params.id}`);
+      }, 1500);
+
     } catch (error: any) {
       toast.error(error.message || "Failed to save hostel profile");
     } finally {
@@ -595,6 +728,76 @@ export default function HostelProfilePage() {
     }));
   };
 
+  const toggleRoomType = (index: number, checked: boolean) => {
+    setProfile(prev => ({
+      ...prev,
+      roomTypes: prev.roomTypes.map((room, i) =>
+        i === index ? { ...room, selected: checked, price: checked ? room.price : '' } : room
+      )
+    }));
+  };
+
+  const updateRoomTypePrice = (index: number, price: string) => {
+    setProfile(prev => ({
+      ...prev,
+      roomTypes: prev.roomTypes.map((room, i) =>
+        i === index ? { ...room, price } : room
+      )
+    }));
+  };
+
+  const handleGenerateDescription = async () => {
+    setGeneratingDescription(true);
+    try {
+      // Get selected room types with prices
+      const selectedRoomTypes = profile.roomTypes
+        .filter(r => r.selected && r.price)
+        .map(r => ({ name: r.label, price: r.price }));
+
+      const response = await fetch('/api/generate-description', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          hostelName: profile.basicInfo.name,
+          city: profile.basicInfo.city,
+          state: profile.basicInfo.state,
+          address: profile.basicInfo.address,
+          accommodationType: profile.propertyDetails.accommodationType,
+          totalRooms: profile.propertyDetails.totalRooms,
+          totalFloors: profile.propertyDetails.totalFloors,
+          roomTypes: selectedRoomTypes, // Include room types
+          amenities: profile.amenities.filter(a => a.available).map(a => a.name),
+          safetyFeatures: profile.safetyFeatures.filter(f => f.available).map(f => f.feature),
+          nearbyLandmarks: profile.locationInfo.nearbyLandmarks.map(l => l.name).filter(Boolean),
+          transportConnectivity: profile.locationInfo.transportConnectivity.map(t => `${t.mode} - ${t.details}`).filter(Boolean),
+          style: descriptionStyle, // Include selected style
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setProfile(prev => ({
+          ...prev,
+          basicInfo: {
+            ...prev.basicInfo,
+            description: data.description,
+          }
+        }));
+        toast.success('Description generated successfully!');
+      } else {
+        toast.error(data.error || 'Failed to generate description');
+      }
+    } catch (error) {
+      console.error('Error generating description:', error);
+      toast.error('Failed to generate description');
+    } finally {
+      setGeneratingDescription(false);
+    }
+  };
+
   const getPhotoTypeLabel = (type: string) => {
     switch (type) {
       case 'boys': return 'Boys Section';
@@ -748,21 +951,21 @@ export default function HostelProfilePage() {
             )}
           </div>
 
-              <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              value={profile.basicInfo.description}
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              value={profile.basicInfo.email}
               onChange={(e) => setProfile(prev => ({
                 ...prev,
-                basicInfo: { ...prev.basicInfo, description: e.target.value }
+                basicInfo: { ...prev.basicInfo, email: e.target.value }
               }))}
-              placeholder="Enter hostel description"
-              rows={3}
-                />
-              </div>
+              placeholder="Enter email address"
+            />
+          </div>
 
-              <div className="space-y-2">
+          <div className="space-y-2">
             <Label htmlFor="address">Full Address</Label>
             <Textarea
               id="address"
@@ -773,8 +976,8 @@ export default function HostelProfilePage() {
               }))}
               placeholder="Enter complete address"
               rows={3}
-                />
-              </div>
+            />
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
@@ -862,20 +1065,6 @@ export default function HostelProfilePage() {
                 placeholder="Enter PIN code"
               />
             </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={profile.basicInfo.email}
-                onChange={(e) => setProfile(prev => ({
-                  ...prev,
-                  basicInfo: { ...prev.basicInfo, email: e.target.value }
-                }))}
-                placeholder="Enter email address"
-                />
-              </div>
             </div>
 
           <Separator />
@@ -1003,6 +1192,53 @@ export default function HostelProfilePage() {
             </div>
           </CardContent>
         </Card>
+
+      {/* Room Types */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            Room Types & Pricing
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground mb-4">
+            Select the room types available in your hostel and set their monthly prices
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {profile.roomTypes && profile.roomTypes.map((roomType, index) => (
+              <div key={roomType.type} className="flex items-center gap-3 p-3 border rounded-lg">
+                <Checkbox
+                  checked={roomType.selected}
+                  onCheckedChange={(checked) => toggleRoomType(index, checked as boolean)}
+                />
+                <div className="flex-1">
+                  <span className="font-medium">{roomType.label}</span>
+                </div>
+                {roomType.selected && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">₹</span>
+                    <Input
+                      type="number"
+                      placeholder="Price"
+                      value={roomType.price}
+                      onChange={(e) => updateRoomTypePrice(index, e.target.value)}
+                      className="w-28 h-9"
+                      min="0"
+                    />
+                    <span className="text-sm text-muted-foreground">/month</span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          {profile.roomTypes && profile.roomTypes.filter(r => r.selected).length === 0 && (
+            <p className="text-sm text-amber-600 mt-4">
+              ⚠️ Please select at least one room type
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Location Information */}
       <Card>
@@ -1198,6 +1434,140 @@ export default function HostelProfilePage() {
                 </div>
               ))}
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Amenities */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Wifi className="h-5 w-5" />
+            Amenities
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {profile.amenities.map((amenity, index) => (
+              <div key={amenity.name} className="flex items-center justify-between p-3 border rounded-lg">
+                <div className="flex items-center space-x-3 flex-1">
+                  <Checkbox
+                    checked={amenity.available}
+                    onCheckedChange={(checked) => 
+                      updateAmenity(index, 'available', checked as boolean)
+                    }
+                  />
+                  <span className="font-medium">{amenity.name}</span>
+                </div>
+                {amenity.available && (
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Floor"
+                      value={amenity.floor || ""}
+                      onChange={(e) => updateAmenity(index, 'floor', e.target.value)}
+                      className="w-20 h-8"
+                    />
+                    <Input
+                      placeholder="Details"
+                      value={amenity.description || ""}
+                      onChange={(e) => updateAmenity(index, 'description', e.target.value)}
+                      className="w-32 h-8"
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Safety Features */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Shield className="h-5 w-5" />
+            Safety Features
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {profile.safetyFeatures.map((feature, index) => (
+              <div key={feature.feature} className="flex items-center justify-between p-3 border rounded-lg">
+                <div className="flex items-center space-x-3 flex-1">
+                  <Checkbox
+                    checked={feature.available}
+                    onCheckedChange={(checked) => 
+                      updateSafetyFeature(index, 'available', checked as boolean)
+                    }
+                  />
+                  <span className="font-medium">{feature.feature}</span>
+                </div>
+                {feature.available && (
+                  <Input
+                    placeholder="Details"
+                    value={feature.details || ""}
+                    onChange={(e) => updateSafetyFeature(index, 'details', e.target.value)}
+                    className="w-32 h-8"
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Description */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5" />
+              Description
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Select value={descriptionStyle} onValueChange={setDescriptionStyle}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Select style" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="professional">Professional</SelectItem>
+                  <SelectItem value="friendly">Friendly & Welcoming</SelectItem>
+                  <SelectItem value="modern">Modern & Trendy</SelectItem>
+                  <SelectItem value="detailed">Detailed</SelectItem>
+                  <SelectItem value="luxury">Premium</SelectItem>
+                  <SelectItem value="student_focused">Student-Focused</SelectItem>
+                  <SelectItem value="working_professional">Professional-Focused</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleGenerateDescription}
+                disabled={generatingDescription || !profile.basicInfo.name}
+                className="gap-2"
+              >
+                <Sparkles className="h-4 w-4" />
+                {generatingDescription ? 'Generating...' : 'Generate'}
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            <Label htmlFor="description">Hostel Description</Label>
+            <Textarea
+              id="description"
+              value={profile.basicInfo.description}
+              onChange={(e) => setProfile(prev => ({
+                ...prev,
+                basicInfo: { ...prev.basicInfo, description: e.target.value }
+              }))}
+              placeholder="Enter detailed hostel description or click 'Generate' to auto-generate"
+              rows={8}
+            />
+            <p className="text-sm text-muted-foreground">
+              Select a writing style and click "Generate" to create an AI-powered description, or write your own.
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -1482,84 +1852,6 @@ export default function HostelProfilePage() {
               }))}
               placeholder="Enter virtual tour link"
             />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Amenities */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Wifi className="h-5 w-5" />
-            Amenities
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {profile.amenities.map((amenity, index) => (
-              <div key={amenity.name} className="flex items-center justify-between p-3 border rounded-lg">
-                <div className="flex items-center space-x-3 flex-1">
-                  <Checkbox
-                    checked={amenity.available}
-                    onCheckedChange={(checked) => 
-                      updateAmenity(index, 'available', checked as boolean)
-                    }
-                  />
-                  <span className="font-medium">{amenity.name}</span>
-                </div>
-                {amenity.available && (
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Floor"
-                      value={amenity.floor || ""}
-                      onChange={(e) => updateAmenity(index, 'floor', e.target.value)}
-                      className="w-20 h-8"
-                    />
-                    <Input
-                      placeholder="Details"
-                      value={amenity.description || ""}
-                      onChange={(e) => updateAmenity(index, 'description', e.target.value)}
-                      className="w-32 h-8"
-                    />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Safety Features */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Shield className="h-5 w-5" />
-            Safety Features
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {profile.safetyFeatures.map((feature, index) => (
-              <div key={feature.feature} className="flex items-center justify-between p-3 border rounded-lg">
-                <div className="flex items-center space-x-3 flex-1">
-                  <Checkbox
-                    checked={feature.available}
-                    onCheckedChange={(checked) => 
-                      updateSafetyFeature(index, 'available', checked as boolean)
-                    }
-                  />
-                  <span className="font-medium">{feature.feature}</span>
-                </div>
-                {feature.available && (
-                  <Input
-                    placeholder="Details"
-                    value={feature.details || ""}
-                    onChange={(e) => updateSafetyFeature(index, 'details', e.target.value)}
-                    className="w-32 h-8"
-                  />
-                )}
-              </div>
-            ))}
           </div>
         </CardContent>
       </Card>

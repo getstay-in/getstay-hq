@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -36,6 +37,8 @@ export default function RoomComponents({ hostelId }: RoomComponentsProps) {
   const [editingComponent, setEditingComponent] = useState<RoomComponent | null>(null);
   const [formData, setFormData] = useState({ name: '', description: '' });
   const [submitting, setSubmitting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     fetchComponents();
@@ -131,6 +134,71 @@ export default function RoomComponents({ hostelId }: RoomComponentsProps) {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+
+    if (!confirm(`Are you sure you want to delete ${selectedIds.size} component(s)?`)) {
+      return;
+    }
+
+    setIsDeleting(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    try {
+      const idsArray = Array.from(selectedIds);
+      for (const id of idsArray) {
+        try {
+          const response = await fetch(`/api/room-components/${id}`, {
+            method: 'DELETE',
+          });
+
+          const data = await response.json();
+
+          if (response.ok && data.success) {
+            successCount++;
+          } else {
+            failCount++;
+          }
+        } catch (error) {
+          failCount++;
+        }
+      }
+
+      if (successCount > 0) {
+        toast.success(`${successCount} component(s) deleted successfully`);
+      }
+      if (failCount > 0) {
+        toast.error(`Failed to delete ${failCount} component(s)`);
+      }
+
+      setSelectedIds(new Set());
+      fetchComponents();
+    } catch (error) {
+      toast.error('Failed to delete components');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === components.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(components.map(c => c._id)));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -148,13 +216,25 @@ export default function RoomComponents({ hostelId }: RoomComponentsProps) {
             Manage components like beds, tables, chairs, etc.
           </p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2" onClick={() => openDialog()}>
-              <Plus className="h-4 w-4" />
-              Add Component
+        <div className="flex items-center gap-2">
+          {selectedIds.size > 0 && (
+            <Button
+              variant="destructive"
+              onClick={handleBulkDelete}
+              disabled={isDeleting}
+              className="gap-2"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete ({selectedIds.size})
             </Button>
-          </DialogTrigger>
+          )}
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2" onClick={() => openDialog()}>
+                <Plus className="h-4 w-4" />
+                Add Component
+              </Button>
+            </DialogTrigger>
           <DialogContent>
             <form onSubmit={handleSubmit}>
               <DialogHeader>
@@ -207,6 +287,7 @@ export default function RoomComponents({ hostelId }: RoomComponentsProps) {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {components.length === 0 ? (
@@ -225,39 +306,58 @@ export default function RoomComponents({ hostelId }: RoomComponentsProps) {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {components.map((component) => (
-            <Card key={component._id}>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Package className="h-4 w-4 text-primary" />
-                  {component.name}
-                </CardTitle>
-                <div className="flex gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => openDialog(component)}
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => deleteComponent(component._id)}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
+        <>
+          {/* Select All Bar */}
+          <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg mb-4">
+            <Checkbox
+              checked={selectedIds.size === components.length && components.length > 0}
+              onCheckedChange={toggleSelectAll}
+            />
+            <span className="text-sm font-medium">
+              Select All ({selectedIds.size}/{components.length})
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {components.map((component) => (
+              <Card key={component._id} className="relative">
+                <div className="absolute top-4 left-4 z-10">
+                  <Checkbox
+                    checked={selectedIds.has(component._id)}
+                    onCheckedChange={() => toggleSelect(component._id)}
+                  />
                 </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  {component.description}
-                </p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 pl-12">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Package className="h-4 w-4 text-primary" />
+                    {component.name}
+                  </CardTitle>
+                  <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => openDialog(component)}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => deleteComponent(component._id)}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="pl-12">
+                  <p className="text-sm text-muted-foreground">
+                    {component.description}
+                  </p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

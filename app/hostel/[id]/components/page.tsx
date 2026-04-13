@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { Plus, Search, Package2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,6 +33,8 @@ export default function RoomComponentsPage() {
   const [selectedComponent, setSelectedComponent] = useState<RoomComponent | null>(null);
   const [components, setComponents] = useState<RoomComponent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     fetchComponents();
@@ -76,6 +79,71 @@ export default function RoomComponentsPage() {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+
+    if (!confirm(`Are you sure you want to delete ${selectedIds.size} component(s)?`)) {
+      return;
+    }
+
+    setIsDeleting(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    try {
+      const idsArray = Array.from(selectedIds);
+      for (const id of idsArray) {
+        try {
+          const response = await fetch(`/api/hostels/${params.id}/components/${id}`, {
+            method: "DELETE",
+          });
+
+          const data = await response.json();
+
+          if (response.ok && data.success) {
+            successCount++;
+          } else {
+            failCount++;
+          }
+        } catch (error) {
+          failCount++;
+        }
+      }
+
+      if (successCount > 0) {
+        toast.success(`${successCount} component(s) deleted successfully`);
+      }
+      if (failCount > 0) {
+        toast.error(`Failed to delete ${failCount} component(s)`);
+      }
+
+      setSelectedIds(new Set());
+      fetchComponents();
+    } catch (error) {
+      toast.error("Failed to delete components");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredComponents.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredComponents.map(c => c._id)));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
   const filteredComponents = components.filter((component) =>
     component.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -83,9 +151,16 @@ export default function RoomComponentsPage() {
   const ComponentCard = ({ component }: { component: RoomComponent }) => (
     <div className="bg-card border rounded-lg p-6 hover:shadow-md transition-all">
       <div className="flex items-start justify-between">
-        <div>
-          <h3 className="font-semibold text-lg">{component.name}</h3>
-          <p className="text-muted-foreground mt-2">{component.description}</p>
+        <div className="flex items-start gap-3 flex-1">
+          <Checkbox
+            checked={selectedIds.has(component._id)}
+            onCheckedChange={() => toggleSelect(component._id)}
+            className="mt-1"
+          />
+          <div className="flex-1">
+            <h3 className="font-semibold text-lg">{component.name}</h3>
+            <p className="text-muted-foreground mt-2">{component.description}</p>
+          </div>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -139,18 +214,42 @@ export default function RoomComponentsPage() {
             className="pl-9 bg-background"
           />
         </div>
-        <div className="hidden sm:hostel">
-          <Button onClick={() => setIsCreateDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Create Component
-          </Button>
-        </div>
-        <div className="sm:hidden">
-          <Button size="icon" onClick={() => setIsCreateDialogOpen(true)}>
-            <Plus className="h-4 w-4" />
-          </Button>
+        <div className="flex items-center gap-2">
+          {selectedIds.size > 0 && (
+            <Button
+              variant="destructive"
+              onClick={handleBulkDelete}
+              disabled={isDeleting}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete ({selectedIds.size})
+            </Button>
+          )}
+          <div className="hidden sm:block">
+            <Button onClick={() => setIsCreateDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Create Component
+            </Button>
+          </div>
+          <div className="sm:hidden">
+            <Button size="icon" onClick={() => setIsCreateDialogOpen(true)}>
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
+
+      {!loading && filteredComponents.length > 0 && (
+        <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg">
+          <Checkbox
+            checked={selectedIds.size === filteredComponents.length && filteredComponents.length > 0}
+            onCheckedChange={toggleSelectAll}
+          />
+          <span className="text-sm font-medium">
+            Select All ({selectedIds.size}/{filteredComponents.length})
+          </span>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center py-12">

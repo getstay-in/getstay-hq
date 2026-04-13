@@ -33,7 +33,7 @@ export default function Dashboard() {
   const [organisations, setOrganisations] = useState<Organisation[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [formData, setFormData] = useState({ name: '', ownerName: '' });
+  const [formData, setFormData] = useState({ name: '' });
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -70,7 +70,7 @@ export default function Dashboard() {
       if (data.success) {
         toast.success('Organisation created successfully');
         setDialogOpen(false);
-        setFormData({ name: '', ownerName: '' });
+        setFormData({ name: '' });
         fetchOrganisations();
       } else {
         toast.error(data.error || 'Failed to create organisation');
@@ -177,18 +177,6 @@ export default function Dashboard() {
                     value={formData.name}
                     onChange={(e) =>
                       setFormData({ ...formData, name: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="ownerName">Owner Name</Label>
-                  <Input
-                    id="ownerName"
-                    placeholder="Enter owner name"
-                    value={formData.ownerName}
-                    onChange={(e) =>
-                      setFormData({ ...formData, ownerName: e.target.value })
                     }
                     required
                   />

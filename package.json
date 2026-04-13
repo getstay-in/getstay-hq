@@ -11,6 +11,7 @@
     "migrate:city": "tsx scripts/migrate-hostel-profile-city.ts"
   },
   "dependencies": {
+    "@google/genai": "^1.49.0",
     "@hookform/resolvers": "^3.9.0",
     "@next/swc-wasm-nodejs": "13.5.1",
     "@radix-ui/react-accordion": "^1.2.0",

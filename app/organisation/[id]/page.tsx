@@ -4,27 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { ArrowLeft, Plus, Building, Trash2, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 
 interface Hostel {
   _id: string;
@@ -37,13 +18,6 @@ interface Hostel {
     slug: string;
   };
   createdAt: string;
-}
-
-interface City {
-  _id: string;
-  name: string;
-  state: string;
-  slug: string;
 }
 
 interface Organisation {
@@ -59,31 +33,39 @@ export default function OrganisationDetailPage() {
 
   const [organisation, setOrganisation] = useState<Organisation | null>(null);
   const [hostels, setHostels] = useState<Hostel[]>([]);
-  const [cities, setCities] = useState<City[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [formData, setFormData] = useState({ name: '', description: '', city: '' });
-  const [submitting, setSubmitting] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     if (organisationId) {
       fetchOrganisationAndHostels();
-      fetchCities();
     }
   }, [organisationId]);
 
-  const fetchCities = async () => {
-    try {
-      const response = await fetch('/api/cities');
-      const data = await response.json();
-      
-      if (data.success) {
-        setCities(data.data);
+  // Refetch data when page becomes visible (user navigates back)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && organisationId) {
+        fetchOrganisationAndHostels();
       }
-    } catch (error) {
-      console.error('Failed to fetch cities:', error);
-    }
-  };
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Also refetch when window gains focus
+    const handleFocus = () => {
+      if (organisationId) {
+        fetchOrganisationAndHostels();
+      }
+    };
+    
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [organisationId]);
 
   const fetchOrganisationAndHostels = async () => {
     try {
@@ -109,31 +91,32 @@ export default function OrganisationDetailPage() {
     }
   };
 
-  const createHostel = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
+  const createHostel = async () => {
+    setCreating(true);
 
     try {
       const response = await fetch('/api/hostels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...formData, organisationId }),
+        body: JSON.stringify({ 
+          name: 'New Hostel',
+          organisationId 
+        }),
       });
 
       const data = await response.json();
 
       if (data.success) {
-        toast.success('Hostel created successfully');
-        setDialogOpen(false);
-        setFormData({ name: '', description: '', city: '' });
-        fetchOrganisationAndHostels();
+        toast.success('Redirecting to hostel profile...');
+        // Redirect to the hostel profile page
+        router.push(`/hostel/${data.data._id}/profile`);
       } else {
         toast.error(data.error || 'Failed to create hostel');
+        setCreating(false);
       }
     } catch (error) {
       toast.error('Failed to create hostel');
-    } finally {
-      setSubmitting(false);
+      setCreating(false);
     }
   };
 
@@ -187,81 +170,15 @@ export default function OrganisationDetailPage() {
           </p>
         </div>
 
-        <div className="flex gap-3">
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size="lg" className="gap-2">
-                <Plus className="h-5 w-5" />
-                Create Hostel
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <form onSubmit={createHostel}>
-                <DialogHeader>
-                  <DialogTitle>Create New Hostel</DialogTitle>
-                  <DialogDescription>
-                    Add a new hostel to this organisation
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Hostel Name</Label>
-                    <Input
-                      id="name"
-                      placeholder="Enter hostel name"
-                      value={formData.name}
-                      onChange={(e) =>
-                        setFormData({ ...formData, name: e.target.value })
-                      }
-                      required
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="city">City</Label>
-                    <Select
-                      value={formData.city}
-                      onValueChange={(value) =>
-                        setFormData({ ...formData, city: value })
-                      }
-                    >
-                      <SelectTrigger id="city">
-                        <SelectValue placeholder="Select a city" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {cities.map((city) => (
-                          <SelectItem key={city._id} value={city._id}>
-                            <div className="flex items-center gap-2">
-                              <MapPin className="h-4 w-4" />
-                              <span>{city.name}, {city.state}</span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="description">Description (Optional)</Label>
-                    <Textarea
-                      id="description"
-                      placeholder="Enter hostel description"
-                      value={formData.description}
-                      onChange={(e) =>
-                        setFormData({ ...formData, description: e.target.value })
-                      }
-                    />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button type="submit" disabled={submitting}>
-                    {submitting ? 'Creating...' : 'Create Hostel'}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
-        </div>
+        <Button 
+          size="lg" 
+          className="gap-2"
+          onClick={createHostel}
+          disabled={creating}
+        >
+          <Plus className="h-5 w-5" />
+          {creating ? 'Creating...' : 'Create Hostel'}
+        </Button>
       </div>
 
       {hostels.length === 0 ? (
@@ -273,9 +190,9 @@ export default function OrganisationDetailPage() {
               Get started by creating your first hostel. You can then add room
               types and components.
             </p>
-            <Button onClick={() => setDialogOpen(true)} className="gap-2">
+            <Button onClick={createHostel} className="gap-2" disabled={creating}>
               <Plus className="h-5 w-5" />
-              Create Your First Hostel
+              {creating ? 'Creating...' : 'Create Your First Hostel'}
             </Button>
           </CardContent>
         </Card>
